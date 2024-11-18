@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+name: Build and Deploy to GitHub Pages
 
 on:
   push:
@@ -7,29 +7,63 @@ on:
 
 permissions:
   contents: write
+  deployments: write
+  pull-requests: write
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
     - name: Use Node.js
       uses: actions/setup-node@v2
       with:
-        node-version: '23.2'
+        node-version: '18.x'
     - name: Install dependencies
       run: npm ci
     - name: Build
       run: npm run build -- --base-href=/wsd_netflix_clone/
-    - name: Deploy
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: dist
+        path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Download build artifacts
+      uses: actions/download-artifact@v2
+      with:
+        name: dist
+        path: dist
+    - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./dist/your-project-name
+    
     - name: Create GitHub Deployment
+      id: deployment
       uses: chrnorm/deployment-action@v2
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         environment: production
         initial-status: success
-        target-url: ${{ steps.deployment.outputs.url }}
+        environment-url: https://${{ github.repository_owner }}.github.io/wsd_netflix_clone
+
+    - name: Update Deployment Status
+      uses: chrnorm/deployment-status@v2
+      if: always()
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+        state: ${{ job.status }}
+        environment-url: https://${{ github.repository_owner }}.github.io/wsd_netflix_clone
+
+    - name: Add deployment URL to summary
+      run: |
+        echo "## Deployment URL" >> $GITHUB_STEP_SUMMARY
+        echo "The app was deployed to: https://${{ github.repository_owner }}.github.io/wsd_netflix_clone" >> $GITHUB_STEP_SUMMARY
